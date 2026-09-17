@@ -1,0 +1,28 @@
+{
+  "name": "tdm-shooter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "LAN-hosted, trackpad-first, third-person 3D Team Deathmatch browser shooter.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node tests/phase1check.mjs && node tests/phase2check.mjs && node tests/phase3check.mjs && node tests/dmcheck.mjs",
+    "test:phase3": "node tests/phase3check.mjs",
+    "bot": "node tests/walkerbot.mjs",
+    "postinstall": "node scripts/build-vendor.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@colyseus/ws-transport": "^0.15.0",
+    "colyseus": "^0.15.0",
+    "colyseus.js": "^0.15.0",
+    "express": "^4.19.2",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}

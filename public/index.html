@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <title>OVERKILL — Dominate. Survive. Conquer.</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="/styles.css" />
+
+  <!-- EARLY error catcher (classic script, before any other code): if ANY
+       later script/module fails to load or throws, the overlay says so
+       instead of leaving a dead "CLICK TO PLAY" button. main.js refines
+       these messages once it boots. -->
+  <script>
+  (function () {
+    var painted = false;
+    function paint(msg) {
+      if (painted) return; painted = true;
+      var s = document.getElementById('overlay-status');
+      var m = document.getElementById('overlay-msg');
+      if (s) { s.textContent = 'script error — game cannot start'; s.className = 'status bad'; }
+      if (m) { m.textContent = '⚠ ' + msg; }
+    }
+    function report(msg) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { paint(msg); });
+      } else { paint(msg); }
+    }
+    window.addEventListener('error', function (e) {
+      report(String((e.error && e.error.message) || e.message || 'unknown error'));
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      report(String((e.reason && e.reason.message) || e.reason || 'unknown rejection'));
+    });
+  })();
+  </script>
+
+  <!-- Import map: bare specifiers -> vendored/offline ES modules (no CDNs).
+       colyseus.js points at OUR browser bundle (built by scripts/build-vendor.mjs
+       at npm install; the package ships no browser-clean artifact).
+       Must appear BEFORE the first <script type="module">. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/vendor/three/three.module.js",
+      "three/addons/": "/vendor/three/addons/",
+      "colyseus.js": "/vendor-build/colyseus.esm.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="gl"></canvas>
+    <!-- lobby character preview: rendered crisp on the right while the game
+         canvas behind is blurred (menu only; hidden in-game) -->
+    <canvas id="preview-gl"></canvas>
+
+    <div id="vignette"></div>
+    <div id="heal-flash"><span id="heal-num"></span></div>
+
+    <div id="crosshair">
+      <i class="ch t"></i><i class="ch b"></i><i class="ch l"></i><i class="ch r"></i><i class="ch dot"></i>
+    </div>
+    <div id="reddot"><i class="rd-ring"></i><i class="rd-post"></i><i class="rd-dot"></i></div>
+    <!-- sniper scope: darkened surround + circular lens + fine crosshair -->
+    <div id="scope">
+      <div class="sc-lens"></div>
+      <i class="sc-h"></i><i class="sc-v"></i><i class="sc-dot"></i>
+    </div>
+    <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+
+    <div id="killfeed"></div>
+
+    <div id="hud-bottom">
+      <!-- health -->
+      <div id="hp-panel" class="hud-glass">
+        <div id="hp-icon">✚</div>
+        <div id="hp-col">
+          <div id="hp-meta"><span id="hp-num">100</span><span class="hp-label">HP</span><span id="hp-status"></span></div>
+          <div id="hp-wrap"><div id="hp-bar"></div><div id="hp-regen"></div></div>
+        </div>
+      </div>
+      <!-- ammo -->
+      <div id="ammo-panel" class="hud-glass">
+        <div id="ammo-col">
+          <div id="ammo-wpn">AR-9</div>
+          <div id="ammo-reserve"><span id="ammo-res">120</span><span id="ammo-cap">/ 300</span></div>
+          <div id="ammo-state"></div>
+        </div>
+        <div id="ammo-mag-box"><span id="ammo-mag">30</span><span id="ammo-magmax">/30</span></div>
+      </div>
+    </div>
+
+    <div id="death-banner">
+      <img id="death-title" src="/assets/eliminated.png" alt="ELIMINATED" />
+      <div id="death-sub"></div>
+    </div>
+
+    <!-- Match HUD: mode/round/score strip (top center) + center announce banner -->
+    <div id="matchbar"></div>
+    <div id="announce"><div id="announce-text"></div><div id="announce-sub"></div></div>
+
+    <!-- Scoreboard (hold Tab) -->
+    <div id="scoreboard"><div id="scoreboard-inner"></div></div>
+
+    <!-- top-left stack: debug info panel + live player list (flex column so
+         they can never overlap regardless of the debug panel's height) -->
+    <div id="topleft">
+      <div id="hud">
+        <h1>OVERKILL</h1>
+        <div class="row"><span class="k">connection</span><span class="v" id="hud-conn">connecting…</span></div>
+        <div class="row"><span class="k">ping</span><span class="v" id="hud-ping">–</span></div>
+        <div class="row"><span class="k">fps</span><span class="v" id="hud-fps">–</span></div>
+        <div class="row"><span class="k">players</span><span class="v" id="hud-players">–</span></div>
+        <div class="row"><span class="k">pos</span><span class="v" id="hud-pos">–</span></div>
+        <div class="row"><span class="k">speed</span><span class="v" id="hud-speed">–</span></div>
+      </div>
+
+      <!-- live player list -->
+      <div id="playerlist" class="hud-glass"></div>
+    </div>
+
+    <div id="hint">
+      <b>click</b> fire · <b>WASD</b> move · <b>swipe</b> aim · <b>Q</b> ADS · <b>E</b> scope ·
+      <b>R</b> reload · <b>Space</b> jump · <b>C</b> crouch · <b>Z</b> shoulder · <b>Esc</b> menu
+    </div>
+
+    <!-- Click-to-play / pause overlay -->
+    <div id="overlay">
+      <img id="brand-logo" src="/assets/overkill-logo.png" alt="OVERKILL" />
+      <div class="overlay-card">
+        <h2>OVERKILL</h2>
+        <p class="sub">dominate · survive · conquer</p>
+        <p id="overlay-status" class="status">loading…</p>
+        <div id="namesel">
+          <div class="cs-title">NAME</div>
+          <input id="name-input" class="lobby-input" maxlength="20" placeholder="your name" autocomplete="off" spellcheck="false" />
+        </div>
+        <div id="modesel">
+          <div class="cs-title">MODE</div>
+          <div id="modesel-row" class="ms-row">
+            <button type="button" class="chip mode on" data-mode="practice">Practice</button>
+            <button type="button" class="chip mode" data-mode="dm">Deathmatch</button>
+            <button type="button" class="chip mode" data-mode="survival">Survival</button>
+            <button type="button" class="chip mode" data-mode="tdm">TDM 5v5</button>
+            <button type="button" class="chip mode" data-mode="tagteam">Tag Team</button>
+          </div>
+          <div id="mode-desc" class="mode-desc">Free play with practice bots. No rounds.</div>
+        </div>
+        <div id="partysel">
+          <div class="cs-title">PARTY <span class="cs-hint">— play solo, host, or join a friend</span></div>
+          <div id="partymode-row" class="ms-row">
+            <button type="button" class="chip party on" data-party="quick">⚡ Quick match</button>
+            <button type="button" class="chip party" data-party="host">🚩 Host room</button>
+            <button type="button" class="chip party" data-party="join">🔑 Join room</button>
+          </div>
+          <div id="host-row" class="party-panel">
+            <div class="party-panel-line">
+              <span class="party-label">Your room code</span>
+              <span id="host-code" class="room-code-badge">——</span>
+              <button id="host-regen" type="button" class="chip mini" title="Generate a new code">↻ new</button>
+            </div>
+            <div class="party-hint">Share this code. Friends pick <b>Join room</b>, enter it, and land on your team.</div>
+          </div>
+          <div id="join-row" class="party-panel">
+            <input id="join-code" class="lobby-input" maxlength="8" placeholder="enter host's code" autocomplete="off" spellcheck="false" />
+            <div class="party-hint">Ask your host for their room code, then hit play.</div>
+          </div>
+          <div id="teamsel-row" class="ms-row">
+            <span class="party-label">Team</span>
+            <button type="button" class="chip team on" data-team="auto">Auto</button>
+            <button type="button" class="chip team team-blue" data-team="blue">Blue</button>
+            <button type="button" class="chip team team-red" data-team="red">Red</button>
+          </div>
+          <div id="botsel-row" class="ms-row">
+            <span class="party-label">Bots</span>
+            <button type="button" class="chip bots on" data-bots="on">Fill w/ bots</button>
+            <button type="button" class="chip bots" data-bots="off">Humans only</button>
+          </div>
+        </div>
+        <div id="charsel">
+          <div class="cs-title">CHARACTER</div>
+          <div id="charsel-row" class="cs-row"></div>
+        </div>
+        <button id="btn-play" class="big">CLICK TO PLAY</button>
+        <p id="overlay-msg" class="msg"></p>
+        <button id="btn-settings" class="chip">⚙ settings</button>
+      </div>
+      <div id="settings"><div id="settings-body"></div></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
