@@ -1,0 +1,13 @@
+node_modules/
+npm-debug.log*
+.DS_Store
+*.log
+.env
+.env.local
+dist/
+public/vendor-build/
+
+# Third-party 3D assets — Craftpix/Sketchfab/Mixamo.
+# Their licenses permit use in the game but NOT redistribution of the raw files.
+# See assets/README.md. Client falls back to procedural stand-ins when absent.
+assets/
